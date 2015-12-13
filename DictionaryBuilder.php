@@ -1,89 +1,131 @@
 <?php
-require_once(dirname(__FILE__) . '/XMLParser.php');
 
+namespace WordChains;
+use SQLite3;
+use ZipArchive;
+
+/**
+ * Dictionary builder class
+ */
 class DictionaryBuilder
 {
-    private static $xmlZipLocation = 'http://www.ibiblio.org/webster/gcide_xml-0.51.zip';
-    private static $localZipFile = 'gcide_xml-0.51.zip';
-    private static $localDictionaryFile = 'dictionary.db';
-    private $zipDownloaded = true;
+    /**
+     * Path of local sqlite dictionary database.
+     *
+     * @var string
+     */
+    private $localDictionaryPath = 'dictionary.db';
 
-    public function __construct()
+    /**
+     * File downloader object.
+     *
+     * @var null|FileDownloader
+     */
+    private $fileDownloader = null;
+
+    /**
+     * Word extractor object.
+     *
+     * @var null|WordExtractor
+     */
+    private $wordExtractor = null;
+
+    /**
+     * Zip extractor class.
+     *
+     * @var null|ZipArchive
+     */
+    private $zipExtractor = null;
+
+    /**
+     * SQLite3 object to build sqlite database.
+     *
+     * @var null|SQLite3
+     */
+    private $sqliteDb = null;
+
+    /**
+     * Class string of SQLite3
+     *
+     * @var null|string
+     */
+    private $sqliteClass = null;
+
+    /**
+     * File manager object
+     *
+     * @var null|FileManager
+     */
+    private $fileManager = null;
+
+    /**
+     * Construct method.
+     *
+     * @param FileDownloader|null $fileDownloader File downloader object.
+     * @param WordExtractor|null $wordExtractor Word extractor object.
+     * @param ZipArchive|null $zipExtractor Zip extractor object.
+     * @param null|string $sqliteClass Sqlite3 class to use.
+     * @param null|FileManager $fileManager File manager class to delete extracted directory.
+     */
+    public function __construct(
+        FileDownloader $fileDownloader = null,
+        WordExtractor $wordExtractor = null,
+        ZipArchive $zipExtractor = null,
+        $sqliteClass = null,
+        FileManager $fileManager = null
+    )
     {
-        if (file_exists(self::$localZipFile)) {
-            // File is downloaded already,
-            // might need to check file size
-            // but that is another story
-            echo 'Zip file which contains dictionaries is downloaded' . PHP_EOL;
-            return;
-        }
-
-        // File to save the contents to
-        $fp = fopen(self::$localZipFile, 'w+');
-
-        // Here is the file we are downloading, replace spaces with %20
-        $ch = curl_init(self::$xmlZipLocation);
-
-        curl_setopt($ch, CURLOPT_TIMEOUT, 50);
-
-        // Give curl the file pointer so that it can write to it
-        curl_setopt($ch, CURLOPT_FILE, $fp);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-
-        // Get curl response
-        if (!curl_exec($ch)) {
-            echo 'Unable to download remote zip file to build dictionary';
-            return;
+        if (null !== $fileDownloader
+            && null !== $wordExtractor
+            && null !== $zipExtractor
+            && null !== $sqliteClass
+            && null !== $fileManager
+        ) {
+            $this->fileDownloader = $fileDownloader;
+            $this->wordExtractor = $wordExtractor;
+            $this->zipExtractor = $zipExtractor;
+            $this->sqliteClass = $sqliteClass;
+            $this->fileManager = $fileManager;
+            
+            return $this;
         } else {
-            $this->zipDownloaded = true;
+            return null;
         }
-
-        // Done
-        curl_close($ch);
     }
 
     public function buildDictionary()
     {
-        if (file_exists(self::$localDictionaryFile)) {
-            // Dictionary is built already,
-            // might need to check file size
-            // but that is another story
-            echo 'Dictionary is built already' . PHP_EOL;
-            return;
+        if (file_exists($this->localDictionaryPath) && filesize($this->localDictionaryPath) > 0) {
+            return $this->localDictionaryPath;
         }
 
-        if (!$this->zipDownloaded) {
-            echo 'Zip is not downloaded successful' . PHP_EOL;
-            return;
-        }
+        $this->sqliteDb = new $this->sqliteClass($this->localDictionaryPath);
+
+        $downloadedFile = $this->fileDownloader->downloadFile();
 
         // Extract downloaded zip file
-        $zip = new ZipArchive();
-        if ($zip->open(self::$localZipFile) === true) {
-            if ($zip->extractTo('./')) {
-                echo 'Zip file extracted successfully' . PHP_EOL;
-                $zip->close();
-            } else {
-                echo 'Zip file was not extracted properly' . PHP_EOL;
-                $zip->close();
-                return;
-            }
+        if ($this->zipExtractor->open($downloadedFile) === true) {
+            $extractedResult = $this->zipExtractor->extractTo('./');
+            $this->zipExtractor->close();
+            if (!$extractedResult)
+                return false;
         }
 
         // Create DB to store list of words
-        $db = new SQLite3('dictionary.db');
-        $db->exec("pragma synchronous = off;");
-        $db->exec("DROP TABLE IF EXISTS dictionary; CREATE TABLE dictionary (words STRING)");
-        $db->exec("CREATE INDEX word_idx ON dictionary (words)");
+        $this->sqliteDb->exec("pragma synchronous = off;");
+        $this->sqliteDb->exec("DROP TABLE IF EXISTS dictionary; CREATE TABLE dictionary (words STRING)");
+        $this->sqliteDb->exec("CREATE INDEX word_idx ON dictionary (words)");
         foreach (glob('./gcide_xml-0.51/xml_files/gcide_?.xml') as $xmlFile) {
-            $parser = new XMLParser($xmlFile);
-            $words = $parser->extractWords();
+            $words = $this->wordExtractor->setXmlFile($xmlFile)->extractWords();
             foreach ($words as $word) {
-                $sql = "INSERT INTO dictionary VALUES ('" . SQLite3::escapeString($word) . "')";
-                $db->exec($sql);
+                $sql = sprintf("INSERT INTO dictionary VALUES ('%s')", SQLite3::escapeString($word));
+                $this->sqliteDb->exec($sql);
             }
         }
-        echo 'Dictionary was built successfully' . PHP_EOL;
-        $db->close();
+
+        // Remove extracted directory
+        $this->fileManager->rm('./gcide_xml-0.51/');
+
+        return $this->localDictionaryPath;
     }
 }

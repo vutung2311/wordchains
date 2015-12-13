@@ -1,27 +1,59 @@
 <?php
-require_once dirname(__FILE__) . '/WordChains.php';
+
+require_once('DictionaryBuilder.php');
+require_once('FileDownloader.php');
+require_once('FileManager.php');
+require_once('WordChains.php');
+require_once('WordExtractor.php');
+
+use WordChains\DictionaryBuilder;
+use WordChains\FileDownloader;
+use WordChains\FileManager;
+use WordChains\WordChains;
+use WordChains\WordExtractor;
 
 class WordChainsTest extends PHPUnit_Framework_TestCase
 {
+
+    /**
+     * Test object
+     *
+     * @var WordChains
+     */
+    private $object;
+
+    public function setUp()
+    {
+        $fileDownloader = new FileDownloader();
+        $wordExtractor = new WordExtractor();
+        $zipExtractor = new ZipArchive();
+        $fileManager = new FileManager();
+        $dictionaryBuilder = new DictionaryBuilder(
+            $fileDownloader,
+            $wordExtractor,
+            $zipExtractor,
+            SQLite3::class,
+            $fileManager
+        );
+        $this->object = new WordChains(
+            $dictionaryBuilder->buildDictionary(),
+            SQLite3::class
+        );
+    }
+
     public function testSymmetry()
     {
-        // Arrange
-        $a = new WordChains();
-
         // Act
-        $b = $a->solve('cat', 'dog');
-        $c = $a->solve('dog', 'cat');
+        $b = $this->object->solve('cat', 'dog');
+        $c = $this->object->solve('dog', 'cat');
 
         // Assert
         $this->assertEquals(implode(' ', $c), implode(' ', $b));
     }
 
     public function testCatDog() {
-        // Arrange
-        $a = new WordChains();
-
         // Act
-        $b = $a->solve('cat', 'dog');
+        $b = $this->object->solve('cat', 'dog');
         $c = ['cat', 'cot', 'cog', 'dog'];
 
         // Assert
@@ -29,11 +61,8 @@ class WordChainsTest extends PHPUnit_Framework_TestCase
     }
 
     public function testRubyCode() {
-        // Arrange
-        $a = new WordChains();
-
         // Act
-        $b = $a->solve('ruby', 'code');
+        $b = $this->object->solve('ruby', 'code');
         $c = ['ruby', 'rubs', 'robs', 'rods', 'rode', 'code'];
 
         // Assert
@@ -41,11 +70,8 @@ class WordChainsTest extends PHPUnit_Framework_TestCase
     }
 
     public function testLeadGold() {
-        // Arrange
-        $a = new WordChains();
-
         // Act
-        $b = $a->solve('lead', 'gold');
+        $b = $this->object->solve('lead', 'gold');
         $c = ['lead', 'load', 'goad', 'gold'];
 
         // Assert
@@ -53,11 +79,8 @@ class WordChainsTest extends PHPUnit_Framework_TestCase
     }
 
     public function testJavaCode() {
-        // Arrange
-        $a = new WordChains();
-
         // Act
-        $b = $a->solve('java', 'code');
+        $b = $this->object->solve('java', 'code');
         $c = ['java', 'lava', 'lave', 'cave', 'cove', 'code'];
 
         // Assert

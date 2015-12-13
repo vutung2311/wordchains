@@ -1,16 +1,51 @@
 <?php
 
+namespace WordChains;
+
+use SplPriorityQueue;
+use SQLite3;
+
 class WordChains
 {
 
-    private $db = null;
+    /**
+     * SQLite database file to get data from.
+     *
+     * @var null
+     */
+    private $dbFile = null;
 
     /**
-     * Initialize the connection to the database
+     * SQLite3 instance to get data from database.
+     *
+     * @var null|string
      */
-    public function __construct()
+    private $dbClass = null;
+
+    /**
+     * SQLite3 object.
+     *
+     * @var null|SQLite3
+     */
+    private $dbObject = null;
+
+    /**
+     * Construct the word chain processor.
+     *
+     * @param null|string $dbFile Db file to get data from.
+     * @param null|SQLite3 $dbClass SQLite3 database object.
+     */
+    public function __construct($dbFile = null, $dbClass = null)
     {
-        $this->db = new SQLite3('dictionary.db', SQLITE3_OPEN_READONLY);
+        if (null !== $dbClass && null !== $dbFile) {
+            $this->dbFile = $dbFile;
+            $this->dbClass = $dbClass;
+            $this->dbObject = new $dbClass($this->dbFile);
+
+            return $this;
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -63,25 +98,25 @@ class WordChains
     /**
      * Return the number of identical character between two word
      *
-     * @param $firstWord
-     * @param $secondWord
+     * @param string $targetWord Target word to compare to.
+     * @param string $sourceWord Source word to compare from.
      * @return int
      */
-    public static function computeMatch($firstWord, $secondWord)
+    public static function computeMatch($targetWord, $sourceWord)
     {
         $diff = 0;
-        for ($i = 0; $i < strlen($firstWord); $i++) {
-            if ($firstWord[$i] != $secondWord[$i]) {
+        for ($i = 0; $i < strlen($targetWord); $i++) {
+            if ($targetWord[$i] != $sourceWord[$i]) {
                 $diff++;
             }
         }
-        return strlen($firstWord) - $diff;
+        return strlen($targetWord) - $diff;
     }
 
     /**
      * Get adjacent words of a specific word
      *
-     * @param $word
+     * @param string $word Word to get adjacent words.
      * @return array
      */
     public function getAdjacency($word)
@@ -94,10 +129,12 @@ class WordChains
         }
 
         foreach ($wildCardList as $wildCard) {
-            $sql = "SELECT * FROM dictionary
-            WHERE words LIKE '" . SQLite3::escapeString($wildCard) . "'
-            AND words <> '" . SQLite3::escapeString($word) . "'";
-            $result = $this->db->query($sql);
+            $sql = sprintf(
+                "SELECT * FROM dictionary WHERE words LIKE '%s' AND words <> '%s'",
+                SQLite3::escapeString($wildCard),
+                SQLite3::escapeString($word)
+            );
+            $result = $this->dbObject->query($sql);
             while ($row = $result->fetchArray()) {
                 $wordList[] = $row[0];
             }
