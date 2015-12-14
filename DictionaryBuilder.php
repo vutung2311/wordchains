@@ -10,13 +10,6 @@ use ZipArchive;
 class DictionaryBuilder
 {
     /**
-     * Path of local sqlite dictionary database.
-     *
-     * @var string
-     */
-    private $localDictionaryPath = 'dictionary.db';
-
-    /**
      * File downloader object.
      *
      * @var null|FileDownloader
@@ -45,13 +38,6 @@ class DictionaryBuilder
     private $sqliteDb = null;
 
     /**
-     * Class string of SQLite3
-     *
-     * @var null|string
-     */
-    private $sqliteClass = null;
-
-    /**
      * File manager object
      *
      * @var null|FileManager
@@ -64,29 +50,29 @@ class DictionaryBuilder
      * @param FileDownloader|null $fileDownloader File downloader object.
      * @param WordExtractor|null $wordExtractor Word extractor object.
      * @param ZipArchive|null $zipExtractor Zip extractor object.
-     * @param null|string $sqliteClass Sqlite3 class to use.
+     * @param SQLite3 $sqliteDb SQLite3 database object.
      * @param null|FileManager $fileManager File manager class to delete extracted directory.
      */
     public function __construct(
         FileDownloader $fileDownloader = null,
         WordExtractor $wordExtractor = null,
         ZipArchive $zipExtractor = null,
-        $sqliteClass = null,
+        SQLite3 $sqliteDb = null,
         FileManager $fileManager = null
     )
     {
         if (null !== $fileDownloader
             && null !== $wordExtractor
             && null !== $zipExtractor
-            && null !== $sqliteClass
+            && null !== $sqliteDb
             && null !== $fileManager
         ) {
             $this->fileDownloader = $fileDownloader;
             $this->wordExtractor = $wordExtractor;
             $this->zipExtractor = $zipExtractor;
-            $this->sqliteClass = $sqliteClass;
+            $this->sqliteDb = $sqliteDb;
             $this->fileManager = $fileManager;
-            
+
             return $this;
         } else {
             return null;
@@ -95,23 +81,34 @@ class DictionaryBuilder
 
     public function buildDictionary()
     {
-        if (file_exists($this->localDictionaryPath) && filesize($this->localDictionaryPath) > 0) {
-            return $this->localDictionaryPath;
-        }
-
-        $this->sqliteDb = new $this->sqliteClass($this->localDictionaryPath);
+        // Check if dictionary is built yet.
+        try {
+            $wordsCount = $this->sqliteDb->querySingle('SELECT COUNT(*) FROM dictionary');
+            if (null !== $wordsCount && $wordsCount > 0) {
+                return $this->sqliteDb;
+            }
+        } catch (\Exception $exception) {}
 
         $downloadedFile = $this->fileDownloader->downloadFile();
-
-        // Extract downloaded zip file
-        if ($this->zipExtractor->open($downloadedFile) === true) {
-            $extractedResult = $this->zipExtractor->extractTo('./');
-            $this->zipExtractor->close();
-            if (!$extractedResult)
-                return false;
+        if (false === $downloadedFile) {
+            return null;
         }
 
-        // Create DB to store list of words
+        // Extract downloaded zip file.
+        try {
+            if ($this->zipExtractor->open($downloadedFile) === false) {
+                return null;
+            }
+            $extractedResult = $this->zipExtractor->extractTo('./');
+            if (!$extractedResult) {
+                return null;
+            }
+            $this->zipExtractor->close();
+        } catch (\Exception $exception) {
+            return null;
+        }
+
+        // Create DB to store list of words.
         $this->sqliteDb->exec("pragma synchronous = off;");
         $this->sqliteDb->exec("DROP TABLE IF EXISTS dictionary; CREATE TABLE dictionary (words STRING)");
         $this->sqliteDb->exec("CREATE INDEX word_idx ON dictionary (words)");
@@ -123,9 +120,9 @@ class DictionaryBuilder
             }
         }
 
-        // Remove extracted directory
+        // Remove extracted directory.
         $this->fileManager->rm('./gcide_xml-0.51/');
 
-        return $this->localDictionaryPath;
+        return $this->sqliteDb;
     }
 }

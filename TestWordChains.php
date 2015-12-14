@@ -28,17 +28,15 @@ class WordChainsTest extends PHPUnit_Framework_TestCase
         $wordExtractor = new WordExtractor();
         $zipExtractor = new ZipArchive();
         $fileManager = new FileManager();
+        $sqliteDb = new SQLite3('dictionary.db');
         $dictionaryBuilder = new DictionaryBuilder(
             $fileDownloader,
             $wordExtractor,
             $zipExtractor,
-            SQLite3::class,
+            $sqliteDb,
             $fileManager
         );
-        $this->object = new WordChains(
-            $dictionaryBuilder->buildDictionary(),
-            SQLite3::class
-        );
+        $this->object = new WordChains($dictionaryBuilder->buildDictionary());
     }
 
     public function testSymmetry()

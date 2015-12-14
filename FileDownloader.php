@@ -27,7 +27,7 @@ class FileDownloader
      */
     public function downloadFile()
     {
-        if (file_exists($this->localZipPath)) {
+        if (true === file_exists($this->localZipPath)) {
             return $this->localZipPath;
         }
 
@@ -37,7 +37,10 @@ class FileDownloader
         // Here is the file we are downloading
         $ch = curl_init($this->xmlZipUrl);
 
-        curl_setopt($ch, CURLOPT_TIMEOUT, 50);
+        // Maximum number of seconds for curl to establish connection.
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT ,0);
+        // Maximum number of seconds for curl to execute.
+        curl_setopt($ch, CURLOPT_TIMEOUT, 0);
 
         // Give curl the file pointer so that it can write to it
         curl_setopt($ch, CURLOPT_FILE, $fp);

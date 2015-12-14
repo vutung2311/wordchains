@@ -9,20 +9,6 @@ class WordChains
 {
 
     /**
-     * SQLite database file to get data from.
-     *
-     * @var null
-     */
-    private $dbFile = null;
-
-    /**
-     * SQLite3 instance to get data from database.
-     *
-     * @var null|string
-     */
-    private $dbClass = null;
-
-    /**
      * SQLite3 object.
      *
      * @var null|SQLite3
@@ -32,15 +18,12 @@ class WordChains
     /**
      * Construct the word chain processor.
      *
-     * @param null|string $dbFile Db file to get data from.
-     * @param null|SQLite3 $dbClass SQLite3 database object.
+     * @param null|SQLite3 $dbObject SQLite3 database object.
      */
-    public function __construct($dbFile = null, $dbClass = null)
+    public function __construct($dbObject = null)
     {
-        if (null !== $dbClass && null !== $dbFile) {
-            $this->dbFile = $dbFile;
-            $this->dbClass = $dbClass;
-            $this->dbObject = new $dbClass($this->dbFile);
+        if (null !== $dbObject) {
+            $this->dbObject = $dbObject;
 
             return $this;
         } else {
